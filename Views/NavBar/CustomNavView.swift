@@ -1,10 +1,3 @@
-//
-//  CustomNavView.swift
-//  skanit
-//
-//  Created by Michal Ručka on 09.08.2024.
-//
-
 import SwiftUI
 
 struct CustomNavView<Content: View>: View {

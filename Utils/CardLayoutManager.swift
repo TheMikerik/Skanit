@@ -9,14 +9,14 @@ struct CarLayoutManager: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            // Full-width card
+            // Large card
             ScanCardWidget(
                 width: screenWidth - 2 * padding,
                 height: (screenWidth - 2 * padding) * cardRatio,
                 isFavourite: false
             )
             
-            // First row: 65% and 35% cards
+            // Big/small
             HStack(spacing: 16) {
                 ScanCardWidget(
                     width: (screenWidth - 3 * padding) * largeCardRatio,
@@ -30,7 +30,7 @@ struct CarLayoutManager: View {
                 )
             }
             
-            // Second row: 35% and 65% cards
+            // Small/big
             HStack(spacing: 16) {
                 ScanCardWidget(
                     width: (screenWidth - 3 * padding) * smallCardRatio,
@@ -44,7 +44,7 @@ struct CarLayoutManager: View {
                 )
             }
             
-            // Third row: three equally spaced cards
+            // 3x small
             HStack(spacing: 16) {
                 ForEach(0..<3) { _ in
                     ScanCardWidget(
@@ -55,14 +55,12 @@ struct CarLayoutManager: View {
                 }
             }
             
-            // Full-width card
             ScanCardWidget(
                 width: screenWidth - 2 * padding,
                 height: (screenWidth - 2 * padding) * cardRatio,
                 isFavourite: false
             )
             
-            // Fourth row: 65% and 35% cards
             HStack(spacing: 16) {
                 ScanCardWidget(
                     width: (screenWidth - 3 * padding) * largeCardRatio,
@@ -76,7 +74,6 @@ struct CarLayoutManager: View {
                 )
             }
             
-            // Fifth row: 35% and 65% cards
             HStack(spacing: 16) {
                 ScanCardWidget(
                     width: (screenWidth - 3 * padding) * smallCardRatio,

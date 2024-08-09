@@ -9,7 +9,6 @@ class ARViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        // Initialize and configure the ARSCNView
         sceneView = ARSCNView(frame: view.bounds)
         sceneView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(sceneView)
@@ -66,7 +65,6 @@ struct ARViewRepresentable: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: ARViewController, context: Context) {
-        // Update the UIViewController if needed
     }
 }
 

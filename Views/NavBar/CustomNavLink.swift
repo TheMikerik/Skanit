@@ -1,10 +1,3 @@
-//
-//  CustomNavLink.swift
-//  skanit
-//
-//  Created by Michal Ručka on 09.08.2024.
-//
-
 import SwiftUI
 
 struct CustomNavLink<Destination: View>: View {
@@ -28,7 +21,7 @@ struct CustomNavLink<Destination: View>: View {
                 .background(Color(.systemGray6))
                 .foregroundColor(.black)
                 .clipShape(Circle())
-                .shadow(radius: 10)
+                .shadow(radius: 6)
         }
     }
 }

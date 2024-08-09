@@ -34,3 +34,7 @@ Create a mobile application that enables users to create 3D scans of objects usi
 ## Programming Languages
 - Swift
 - Objective-C
+
+## Important Links
+- (Figma)[https://www.figma.com/design/JQ103mUxXS9Ugs0N8UXS3N/Untitled?node-id=0-1&t=sdMCXFaEK2RYcmlx-1]
+- (Github)[https://github.com/TheMikerik/Skanit]

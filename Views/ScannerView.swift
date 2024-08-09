@@ -3,7 +3,7 @@ import SwiftUI
 struct ScannerView: View {
     var body: some View {
         ZStack {
-            ARView()
+            ARViewRepresentable()
                 .edgesIgnoringSafeArea(.all)
             
             VStack {

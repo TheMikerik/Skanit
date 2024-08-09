@@ -2,38 +2,74 @@ import SwiftUI
 import ARKit
 import AVFoundation
 
-struct ARView: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> ARViewController {
-        return ARViewController()
+class ARViewController: UIViewController {
+    
+    var sceneView: ARSCNView!
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+
+        // Initialize and configure the ARSCNView
+        sceneView = ARSCNView(frame: view.bounds)
+        sceneView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(sceneView)
+
+        guard ARFaceTrackingConfiguration.isSupported else {
+            fatalError("Face tracking is not supported on this device")
+        }
+        sceneView.delegate = self
     }
 
-    func updateUIViewController(_ uiViewController: ARViewController, context: Context) {
-        // Aktualizace UIViewController pokud je potřeba
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+
+        let configuration = ARFaceTrackingConfiguration()
+        sceneView.session.run(configuration)
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+
+        sceneView.session.pause()
     }
 }
 
-class ARViewController: UIViewController, ARSessionDelegate {
-    var arSession: ARSession!
-    
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        
-        arSession = ARSession()
-        arSession.delegate = self
+extension ARViewController: ARSCNViewDelegate {
 
-        let configuration = ARFaceTrackingConfiguration()
-        if ARFaceTrackingConfiguration.isSupported {
-            arSession.run(configuration)
-        } else {
-            print("Face tracking not supported")
+    func renderer(_ renderer: SCNSceneRenderer, nodeFor anchor: ARAnchor) -> SCNNode? {
+
+        let device = MTLCreateSystemDefaultDevice()
+        let faceGeometry = ARSCNFaceGeometry(device: device!)
+        let node = SCNNode(geometry: faceGeometry)
+        node.geometry?.firstMaterial?.fillMode = .lines
+
+        return node
+    }
+
+    func renderer(
+        _ renderer: SCNSceneRenderer,
+        didUpdate node: SCNNode,
+        for anchor: ARAnchor) {
+
+        guard let faceAnchor = anchor as? ARFaceAnchor,
+              let faceGeometry = node.geometry as? ARSCNFaceGeometry else {
+            return
         }
+        faceGeometry.update(from: faceAnchor.geometry)
+    }
+}
 
-        let arSCNView = ARSCNView(frame: self.view.bounds)
-        arSCNView.session = arSession
-        self.view.addSubview(arSCNView)
+struct ARViewRepresentable: UIViewControllerRepresentable {
+
+    func makeUIViewController(context: Context) -> ARViewController {
+        ARViewController()
     }
-    
-    func session(_ session: ARSession, didUpdate frame: ARFrame) {
-        // Zpracování aktualizace AR frame
+
+    func updateUIViewController(_ uiViewController: ARViewController, context: Context) {
+        // Update the UIViewController if needed
     }
+}
+
+#Preview {
+    ContentView()
 }

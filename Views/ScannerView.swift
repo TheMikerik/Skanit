@@ -1,16 +1,22 @@
 import SwiftUI
 
 struct ScannerView: View {
+    @StateObject private var cameraCoordinator = CameraViewRepresentable.Coordinator(parent: CameraViewRepresentable())
+
     var body: some View {
         ZStack {
-            ARViewRepresentable()
+            CameraViewRepresentable()
                 .edgesIgnoringSafeArea(.all)
-            
+                .environmentObject(cameraCoordinator) // Pass coordinator to the representable
+
             VStack {
                 Spacer()
                 PlusIconWidget()
                 Spacer()
-                TakeScanWidget().padding(.bottom, 15)
+                TakeScanWidget(action: {
+                    // Trigger photo capture
+                    cameraCoordinator.capturePhoto()
+                }).padding(.bottom, 15)
             }
         }
     }

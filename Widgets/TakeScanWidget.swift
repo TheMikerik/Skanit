@@ -7,8 +7,10 @@ struct TakeScanWidget: View {
     var shadowColor: Color = .black
     var shadowRadius: CGFloat = 10
 
+    var action: () -> Void
+
     var body: some View {
-        Button(action: {}) {
+        Button(action: action) {
             Circle()
                 .stroke(borderColor, lineWidth: borderWidth)
                 .frame(width: buttonSize, height: buttonSize)
@@ -20,5 +22,5 @@ struct TakeScanWidget: View {
 }
 
 #Preview {
-    TakeScanWidget()
+    TakeScanWidget(action: {})
 }

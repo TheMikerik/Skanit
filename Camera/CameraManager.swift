@@ -1,109 +1,163 @@
 import UIKit
 import AVFoundation
+import Metal
 import os.log
 
 class CameraViewController: UIViewController {
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.example.skanit", category: "CameraViewController")
 
-    var captureSession: AVCaptureSession!
-    var photoOutput: AVCapturePhotoOutput!
-    var previewLayer: AVCaptureVideoPreviewLayer!
+    private var captureSession: AVCaptureSession!
+    private let sessionQueue = DispatchQueue(label: "session queue", attributes: [], autoreleaseFrequency: .workItem)
 
+    private var videoDataOutput: AVCaptureVideoDataOutput!
+    private var depthDataOutput: AVCaptureDepthDataOutput!
+    private var outputSynchronizer: AVCaptureDataOutputSynchronizer?
+
+    private var textureCache: CVMetalTextureCache?
+
+    private var previewLayer: AVCaptureVideoPreviewLayer!
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-        setupCamera()
+        
+        CVMetalTextureCacheCreate(nil, nil, MTLCreateSystemDefaultDevice()!, nil, &textureCache)
+
+        setupCaptureSession()
     }
 
-    func setupCamera() {
+    private func setupCaptureSession() {
         captureSession = AVCaptureSession()
-        captureSession.sessionPreset = .photo
         
-        guard let device = AVCaptureDevice.default(.builtInTrueDepthCamera, for: .video, position: .front) else {
+        sessionQueue.async {
+            self.configureSession()
+        }
+    }
+
+    private func configureSession() {
+        guard let videoDevice = AVCaptureDevice.default(.builtInTrueDepthCamera, for: .video, position: .front) else {
             logger.error("TrueDepth camera is not available on this device")
-            fatalError("TrueDepth camera is not available on this device")
+            return
         }
-        
+
         do {
-            let input = try AVCaptureDeviceInput(device: device)
-            if captureSession.canAddInput(input) {
-                captureSession.addInput(input)
+            let videoDeviceInput = try AVCaptureDeviceInput(device: videoDevice)
+            
+            captureSession.beginConfiguration()
+            
+            if captureSession.canAddInput(videoDeviceInput) {
+                captureSession.addInput(videoDeviceInput)
             } else {
-                logger.error("Unable to add camera input to capture session.")
-                fatalError("Unable to add camera input")
+                logger.error("Could not add video device input to the session")
+                captureSession.commitConfiguration()
+                return
             }
+
+            videoDataOutput = AVCaptureVideoDataOutput()
+            videoDataOutput.alwaysDiscardsLateVideoFrames = true
+            videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+            
+            if captureSession.canAddOutput(videoDataOutput) {
+                captureSession.addOutput(videoDataOutput)
+            } else {
+                logger.error("Could not add video data output to the session")
+                captureSession.commitConfiguration()
+                return
+            }
+
+            depthDataOutput = AVCaptureDepthDataOutput()
+            depthDataOutput.isFilteringEnabled = false
+
+            if captureSession.canAddOutput(depthDataOutput) {
+                captureSession.addOutput(depthDataOutput)
+            } else {
+                logger.error("Could not add depth data output to the session")
+                captureSession.commitConfiguration()
+                return
+            }
+
+            if let connection = depthDataOutput.connection(with: .depthData) {
+                connection.isEnabled = true
+            } else {
+                logger.error("No AVCaptureConnection")
+                captureSession.commitConfiguration()
+                return
+            }
+
+            outputSynchronizer = AVCaptureDataOutputSynchronizer(dataOutputs: [videoDataOutput, depthDataOutput])
+            outputSynchronizer!.setDelegate(self, queue: sessionQueue)
+
+            let depthFormats = videoDevice.activeFormat.supportedDepthDataFormats
+            let filtered = depthFormats.filter {
+                CMFormatDescriptionGetMediaSubType($0.formatDescription) == kCVPixelFormatType_DepthFloat16
+            }
+            
+            let selectedFormat = filtered.max(by: {
+                CMVideoFormatDescriptionGetDimensions($0.formatDescription).width < CMVideoFormatDescriptionGetDimensions($1.formatDescription).width
+            })
+
+            try videoDevice.lockForConfiguration()
+            videoDevice.activeDepthDataFormat = selectedFormat
+            videoDevice.unlockForConfiguration()
+            
+            captureSession.commitConfiguration()
+            
+            self.captureSession.startRunning()
+            self.logger.info("Capture session started.")
+            
+            DispatchQueue.main.async {
+                self.setupPreviewLayer()
+            }
+            
         } catch {
-            logger.error("Error setting up camera input: \(error.localizedDescription)")
-            fatalError("Error setting up camera input: \(error)")
+            logger.error("Error setting up capture session: \(error.localizedDescription)")
+            captureSession.commitConfiguration()
+            return
         }
+    }
 
-        photoOutput = AVCapturePhotoOutput()
-        if captureSession.canAddOutput(photoOutput) {
-            captureSession.addOutput(photoOutput)
-            photoOutput.isDepthDataDeliveryEnabled = photoOutput.isDepthDataDeliverySupported
-        } else {
-            logger.error("Unable to add photo output to capture session.")
-            fatalError("Unable to add photo output")
-        }
-
+    private func setupPreviewLayer() {
         previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         previewLayer.frame = view.bounds
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
+        
+        logger.info("Preview layer setup completed successfully.")
+    }
 
-        logger.info("Camera setup completed successfully.")
+    private func visualizeDepthData(_ depthData: AVDepthData) {
+        let depthMap = depthData.depthDataMap
         
-        let group = DispatchGroup()
-        group.enter()
+        var ciImage = CIImage(cvPixelBuffer: depthMap)
         
-        DispatchQueue.global(qos: .background).async {
-            self.captureSession.startRunning()
-            self.logger.info("Capture session started.")
-            group.leave()
-        }
+        let rotationTransform = CGAffineTransform(rotationAngle: 3 * .pi / 2)
+        ciImage = ciImage.transformed(by: rotationTransform)
         
-        group.notify(queue: .main) {
-            self.capturePhoto()
+        let filter = CIFilter(name: "CIColorControls")
+        filter?.setValue(ciImage, forKey: kCIInputImageKey)
+        filter?.setValue(0.0, forKey: kCIInputSaturationKey)
+        
+        if let outputImage = filter?.outputImage {
+            let context = CIContext()
+            if let cgImage = context.createCGImage(outputImage, from: outputImage.extent) {
+                DispatchQueue.main.async {
+                    let imageView = UIImageView(frame: self.view.bounds)
+                    imageView.image = UIImage(cgImage: cgImage)
+                    self.view.addSubview(imageView)
+                }
+            }
+        } else {
+            logger.error("Failed to create grayscale image from depth data")
         }
     }
 
-    func capturePhoto() {
-        let photoSettings = AVCapturePhotoSettings()
-        photoSettings.isDepthDataDeliveryEnabled = photoOutput.isDepthDataDeliverySupported
-        photoOutput.capturePhoto(with: photoSettings, delegate: self)
-        logger.info("Photo capture initiated.")
-    }
 }
 
-extension CameraViewController: AVCapturePhotoCaptureDelegate {
-
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        if let error = error {
-            logger.error("Error capturing photo: \(error.localizedDescription)")
-            return
-        }
-
-        guard let photoData = photo.fileDataRepresentation() else {
-            logger.error("Error getting photo data from capture.")
-            return
-        }
-
-        if let depthData = photo.depthData {
-            let depthMap = depthData.depthDataMap
-            logger.info("Depth data captured successfully.")
-        }
-
-        if let image = UIImage(data: photoData) {
-            UIImageWriteToSavedPhotosAlbum(image, self, #selector(image(_:didFinishSavingWithError:contextInfo:)), nil)
-            logger.info("Photo saved to photo library.")
-        }
-    }
-
-    @objc func image(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
-        if let error = error {
-            logger.error("Error saving photo to library: \(error.localizedDescription)")
-        } else {
-            logger.info("Photo saved successfully to library.")
+extension CameraViewController: AVCaptureDataOutputSynchronizerDelegate {
+    func dataOutputSynchronizer(_ synchronizer: AVCaptureDataOutputSynchronizer, didOutput synchronizedDataCollection: AVCaptureSynchronizedDataCollection) {
+        if let syncedDepthData = synchronizedDataCollection.synchronizedData(for: depthDataOutput) as? AVCaptureSynchronizedDepthData {
+            let depthData = syncedDepthData.depthData
+            visualizeDepthData(depthData)
         }
     }
 }
